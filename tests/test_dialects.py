@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pytest
 
-from sqlalchemy import create_engine, Column, Integer, String, func, distinct
+from sqlalchemy import create_engine, Column, Integer, String, func, distinct, or_, not_
 from sqlalchemy.orm import sessionmaker, deferred
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -143,6 +143,48 @@ def test_match(sphinx_connections):
     query = query.filter(func.match(MockSphinxModel.name, "adriel"), func.match(MockSphinxModel.country, "US"))
     sql_text = query.statement.compile(sphinx_engine).string
     assert sql_text == "SELECT id \nFROM mock_table \nWHERE MATCH('(@name adriel) (@country US)')"
+
+    # Matching with not_
+    query = session.query(MockSphinxModel.id)
+    query = query.filter(not_(MockSphinxModel.country).match("US"))
+    sql_text = query.statement.compile(sphinx_engine).string
+    assert sql_text == "SELECT id \nFROM mock_table \nWHERE MATCH('(@!country US)')"
+
+    # Matching with not_ through functions
+    query = session.query(MockSphinxModel.id)
+    query = query.filter(func.match(not_(MockSphinxModel.country), "US"))
+    sql_text = query.statement.compile(sphinx_engine).string
+    assert sql_text == "SELECT id \nFROM mock_table \nWHERE MATCH('(@!country US)')"
+
+    # Matching multiple columns through functions
+    query = session.query(MockSphinxModel.id)
+    query = query.filter(func.match(MockSphinxModel.name, MockSphinxModel.country, "US"))
+    sql_text = query.statement.compile(sphinx_engine).string
+    assert sql_text == "SELECT id \nFROM mock_table \nWHERE MATCH('(@(name,country) US)')"
+
+    # Matching multiple columns with or_ through functions
+    query = session.query(MockSphinxModel.id)
+    query = query.filter(func.match(or_(MockSphinxModel.name, MockSphinxModel.country), "US"))
+    sql_text = query.statement.compile(sphinx_engine).string
+    assert sql_text == "SELECT id \nFROM mock_table \nWHERE MATCH('(@(name,country) US)')"
+
+    # Matching multiple columns with or_
+    query = session.query(MockSphinxModel.id)
+    query = query.filter(or_(MockSphinxModel.name, MockSphinxModel.country).match("US"))
+    sql_text = query.statement.compile(sphinx_engine).string
+    assert sql_text == "SELECT id \nFROM mock_table \nWHERE MATCH('(@(name,country) US)')"
+
+    # Matching multiple columns with or_ and not_ through functions
+    query = session.query(MockSphinxModel.id)
+    query = query.filter(func.match(not_(or_(MockSphinxModel.name, MockSphinxModel.country)), "US"))
+    sql_text = query.statement.compile(sphinx_engine).string
+    assert sql_text == "SELECT id \nFROM mock_table \nWHERE MATCH('(@!(name,country) US)')"
+
+    # Matching multiple columns with or_ and not_
+    query = session.query(MockSphinxModel.id)
+    query = query.filter(not_(or_(MockSphinxModel.name, MockSphinxModel.country)).match("US"))
+    sql_text = query.statement.compile(sphinx_engine).string
+    assert sql_text == "SELECT id \nFROM mock_table \nWHERE MATCH('(@!(name,country) US)')"
 
     # Mixing and Matching
     query = session.query(MockSphinxModel.id)

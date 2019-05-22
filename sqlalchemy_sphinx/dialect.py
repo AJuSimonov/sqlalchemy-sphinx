@@ -2,7 +2,8 @@
 
 from sqlalchemy.engine import default
 from sqlalchemy.sql import compiler
-from sqlalchemy.sql.elements import ClauseList
+from sqlalchemy.sql.annotation import Annotated
+from sqlalchemy.sql.elements import ClauseList, UnaryExpression, BooleanClauseList, Grouping
 from sqlalchemy.sql import expression as sql
 from sqlalchemy.sql.functions import Function
 
@@ -74,12 +75,34 @@ class SphinxCompiler(compiler.SQLCompiler):
             name = self.preparer.quote(name)
         return name
 
+    def _process_match(self, expr):
+        negative = False
+        if isinstance(expr, Grouping):
+            expr = expr.element
+        if isinstance(expr, UnaryExpression):
+            negative = True
+            expr = expr.element
+        if isinstance(expr, Grouping):
+            expr = expr.element
+        if isinstance(expr, BooleanClauseList):
+            expr = expr.clauses
+
+        if isinstance(expr, (list, tuple)):
+            columns = u"({0})".format(','.join(map(self.process, expr)))
+        else:
+            columns = self.process(expr)
+
+        if negative:
+            columns = u"!{0}".format(columns)
+
+        return columns
+
     def visit_match_op_binary(self, binary, operator, **kw):
         if self.left_match and self.right_match:
             match_terms = []
             for left, right in zip(self.left_match, self.right_match):
                 t = u"(@{0} {1})".format(
-                    self.process(left),
+                    self._process_match(left),
                     escape_special_chars(self.dialect.escape_value(right.value)))
                 match_terms.append(t)
             self.left_match = tuple()
@@ -97,7 +120,7 @@ class SphinxCompiler(compiler.SQLCompiler):
                     t = u"{0}".format(self.dialect.escape_value(right.value))
                 else:
                     t = u"(@{0} {1})".format(
-                        self.process(left),
+                        self._process_match(left),
                         escape_special_chars(self.dialect.escape_value(right.value)))
                 match_terms.append(t)
             self.left_match = tuple()
@@ -159,7 +182,11 @@ class SphinxCompiler(compiler.SQLCompiler):
                 match_operators.append(clause.operator)
             elif isinstance(clause, Function):
                 if clause.name.lower() == "match":
-                    if len(clause.clauses) == 2:
+                    if len(clause.clauses) > 2:
+                        clauses_tuple = tuple(clause.clauses)
+                        func_left = clauses_tuple[:-1]
+                        func_right = clauses_tuple[-1]
+                    elif len(clause.clauses) == 2:
                         func_left, func_right = clause.clauses
                     else:
                         func_left = None
