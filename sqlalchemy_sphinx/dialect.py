@@ -106,7 +106,10 @@ class SphinxCompiler(compiler.SQLCompiler):
 
     def visit_distinct_func(self, func, **kw):
         return "DISTINCT {0}".format(self.process(func.clauses.clauses[0]))
-
+    
+    def visit_weight_func(self, func, **kw):
+        return "WEIGHT()"
+    
     def visit_select(self, select,
                      asfrom=False, parens=True, iswrapper=False,
                      fromhints=None, compound_index=1, force_result_map=False,
