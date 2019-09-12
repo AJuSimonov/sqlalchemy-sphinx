@@ -38,6 +38,9 @@ class Dialect(SphinxDialect, pymysql_dialect.MySQLDialect_pymysql):
     def _detect_collations(self, connection):
         pass
 
+    def _detect_sql_mode(self, connection):
+        self._sql_mode = ""
+    
     def _detect_ansiquotes(self, connection):
         self._server_ansiquotes = False
 
